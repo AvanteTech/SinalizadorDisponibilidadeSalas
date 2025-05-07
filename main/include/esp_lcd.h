@@ -32,6 +32,11 @@ typedef int lcd_err_t;      /*!< LCD error type */
 
 #define LCD_DATA_LINE 4 /*!< 4-Bit data line */
 
+typedef enum {
+    LCD_SCROLL_LEFT,
+    LCD_SCROLL_RIGHT
+} lcd_scroll_dir_t;
+
 /******************************************************************
  * \enum lcd_state esp_lcd.h 
  * \brief LCD state enumeration
@@ -69,7 +74,7 @@ void lcdInit(lcd_t *const lcd);
 
 void lcdCtor(lcd_t *lcd, gpio_num_t data[LCD_DATA_LINE], gpio_num_t en, gpio_num_t regSel);
 
-lcd_err_t lcdSetText(lcd_t *const lcd, char *text, int x, int y);
+lcd_err_t lcdSetText(lcd_t *const lcd, const char *text, int x, int y);
 
 lcd_err_t lcdSetInt(lcd_t *const lcd, int val, int x, int y);
 
@@ -78,5 +83,7 @@ lcd_err_t lcdClear(lcd_t *const lcd);
 void lcdFree(lcd_t * const lcd);
 
 void assert_lcd(lcd_err_t lcd_error);
+
+lcd_err_t lcdScrollText(lcd_t *const lcd, const char *text, int y, lcd_scroll_dir_t direction, int speed_ms);
 
 #endif

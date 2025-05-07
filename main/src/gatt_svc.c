@@ -35,6 +35,7 @@ int device_write(uint16_t conn_handle, uint16_t attr_handle, struct ble_gatt_acc
     }
     else if (strcmp(rxValue, "C") == 0)
     {
+        status = ' ';
         if (message != NULL)
         {
             free(message);

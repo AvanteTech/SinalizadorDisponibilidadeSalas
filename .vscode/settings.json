@@ -1,0 +1,7 @@
+{
+    "files.associations": {
+        "common.h": "c",
+        "wifi_connect.h": "c",
+        "esp_lcd.h": "c"
+    }
+}

@@ -6,7 +6,6 @@
 #include "esp_lcd.h"
 #include "esp_log.h"
 
-
 /* LCD tag */
 static const char *lcd_tag = "LCD tag"; /*! < LCD tag */
 
@@ -213,7 +212,7 @@ void lcdCtor(lcd_t *lcd, gpio_num_t data[LCD_DATA_LINE], gpio_num_t en, gpio_num
  * @param y     location at y-axis
  * @return      lcd error status @see lcd_err_t
  */
-lcd_err_t lcdSetText(lcd_t *const lcd, char *text, int x, int y)
+lcd_err_t lcdSetText(lcd_t *const lcd, const char *text, int x, int y)
 {
     /* Check if lcd is active */
     if (lcd->state == LCD_ACTIVE)
@@ -277,7 +276,7 @@ lcd_err_t lcdSetInt(lcd_t *const lcd, int val, int x, int y)
  * @brief Clear LCD screen
  * Detailed description starts here
  * @param lcd   pointer to LCD object
- * @return      lcd error status @see lcd_err_t 
+ * @return      lcd error status @see lcd_err_t
  */
 lcd_err_t lcdClear(lcd_t *const lcd)
 {
@@ -322,13 +321,75 @@ void lcdFree(lcd_t *const lcd)
     lcd->state = (lcd_state_t)LCD_INACTIVE;
 }
 
-void assert_lcd(lcd_err_t lcd_error){
+void assert_lcd(lcd_err_t lcd_error)
+{
     if (lcd_error == LCD_FAIL)
     {
-      ESP_LOGE(lcd_tag, "LCD has failed!!!\n"); /* Display error message */
+        ESP_LOGE(lcd_tag, "LCD has failed!!!\n"); /* Display error message */
     }
     else
     {
-      ESP_LOGI(lcd_tag, "LCD write was sucessfull...\n");
+        ESP_LOGI(lcd_tag, "LCD write was sucessfull...\n");
     }
+}
+lcd_err_t lcdScrollText(lcd_t *const lcd,
+    const char *text,
+    int y,
+    lcd_scroll_dir_t direction,
+    int speed_ms)
+{
+    // Verificação de parâmetros
+    if (!lcd || !text) return LCD_FAIL;
+    if (lcd->state != LCD_ACTIVE) return LCD_FAIL;
+    if (y < 0 || y > 1) return LCD_FAIL; // Para displays de 2 linhas
+    if (speed_ms < 0) return LCD_FAIL;
+
+    // Configurações fixas para display 16x2
+    const int display_width = 16; // Colunas fixas
+    const int partial = 8; // Metade da largura do display
+    const int initial_hold = 500;
+
+    size_t len = strlen(text);
+    if (len <= display_width) {
+        lcdSetText(lcd, text, 0, y);
+        return LCD_OK;
+    }
+
+    // Cria buffer estendido com padding
+    size_t ext_len = len + 2 * partial;
+    char *ext_buf = malloc(ext_len + 1);
+    if (!ext_buf) return LCD_FAIL;
+
+    memset(ext_buf, ' ', partial);
+    memcpy(ext_buf + partial, text, len);
+    memset(ext_buf + partial + len, ' ', partial);
+    ext_buf[ext_len] = '\0';
+
+    // Cálculo da janela de scroll
+    int start = partial;
+    int end = partial + len - display_width;
+    int steps = end - start + 1;
+
+    // Buffer para a janela atual
+    char window[display_width + 1];
+    window[display_width] = '\0';
+
+    // Índice inicial conforme direção
+    int current_idx = (direction == LCD_SCROLL_LEFT) ? start : end;
+
+    // Exibe posição inicial com pausa maior
+    memcpy(window, ext_buf + current_idx, display_width);
+    lcdSetText(lcd, window, 0, y);
+    vTaskDelay(pdMS_TO_TICKS(initial_hold));
+
+    // Scroll pelas posições restantes
+    for (int i = 1; i < steps; ++i) {
+        current_idx += (direction == LCD_SCROLL_LEFT) ? 1 : -1;
+        memcpy(window, ext_buf + current_idx, display_width);
+        lcdSetText(lcd, window, 0, y);
+        vTaskDelay(pdMS_TO_TICKS(speed_ms));
+    }
+
+    free(ext_buf);
+    return LCD_OK;
 }

@@ -2,12 +2,15 @@
 #include "gap.h"
 #include "gatt_svc.h"
 #include "include/esp_lcd.h"
+#include "wifi_connect.h"
+#include "sntp_time.h"
+#include "esp_sntp.h"
 
 lcd_t lcd;
-
 char *message = NULL;
-char status = 'D';
-int payload_index = 0; 
+char status = ' ';
+char status_ready = 'D';
+int payload_index = 0;
 int page = 0;
 
 void ble_store_config_init(void);
@@ -16,7 +19,6 @@ static void on_stack_reset(int reason);
 static void on_stack_sync(void);
 static void nimble_host_config_init(void);
 static void nimble_host_task(void *param);
-
 
 static void on_stack_reset(int reason)
 {
@@ -47,36 +49,123 @@ static void nimble_host_task(void *param)
     vTaskDelete(NULL);
 }
 
-void lcd_task(void *pvParameters) {
-    while (1) {
+void get_full_datetime(char *datetime_str)
+{
+    time_t now;
+    struct tm timeinfo;
+    time(&now);
+    localtime_r(&now, &timeinfo);
+
+    strftime(datetime_str, 20, "%d/%m/%Y-%H:%M", &timeinfo);
+}
+char *get_scheduled_message()
+{
+    time_t now;
+    struct tm timeinfo;
+    time(&now);
+    localtime_r(&now, &timeinfo);
+
+    int hour = timeinfo.tm_hour;
+    int min = timeinfo.tm_min;
+
+    // Verifica os intervalos
+    if ((hour == 8 && min >= 0) || (hour == 9) || (hour == 10 && min < 20))
+    {
+        status_ready = 'O';
+        return " Em expediente  ";
+    }
+    else if ((hour == 10 && min >= 0 && min < 20))
+    {
+        status_ready = 'D';
+        return "   Intervalo    ";
+    }
+    else if ((hour == 10 && min >= 20) || (hour == 11) || (hour == 12 && min < 0))
+    {
+        status_ready = 'O';
+        return " Em expediente  ";
+    }
+    else if ((hour == 15 && min >= 0 && min < 20))
+    {
+        status_ready = 'D';
+        return "   Intervalo    ";
+    }
+    else if ((hour >= 13 && hour < 15) || (hour == 15 && min >= 20) || (hour >= 16 && hour < 17))
+    {
+        status_ready = 'O';
+        return " Em expediente  ";
+    }
+    else if ((hour >= 18 && hour < 20))
+    {
+        status_ready = 'O';
+        return " Em expediente  ";
+    }
+    else if ((hour == 20 && min >= 0 && min < 20))
+    {
+        status_ready = 'D';
+        return "   Intervalo    ";
+    }
+    else if ((hour >= 20 && min >= 20) || (hour >= 21 && hour < 22))
+    {
+        status_ready = 'O';
+        return " Em expediente  ";
+    }
+    else
+    {
+        status_ready = 'D';
+    }
+
+    return NULL;
+}
+
+void lcd_task(void *pvParameters)
+{
+    char time_date[20];
+    char *message_ready = NULL;
+    char status_to_show = ' ';
+    char *message_to_show = NULL;
+
+    while (1)
+    {
+        get_full_datetime(time_date);
+        message_ready = get_scheduled_message();
+        status_to_show = (status != ' ') ? status : status_ready;
+        message_to_show = (message != NULL) ? message : message_ready;
+
         lcdClear(&lcd);
-        int totalPages = 2; 
-        if (message != NULL && strlen(message) > 0) {
-            totalPages += (strlen(message) + 15) / 16; 
-        }
-
-        if (page == 0) {
-            lcdSetText(&lcd, "   Escritorio   ", 0, 0);
-            lcdSetText(&lcd, "   AvanteTech   ", 0, 1);
-        } else if (page == 1) {
-            lcdSetText(&lcd, "     Status     ", 0, 0);
-            if (status == 'O') {
-                lcdSetText(&lcd, "     Ocupado    ", 0, 1);
-            } else if (status == 'D') {
-                lcdSetText(&lcd, "   Disponivel   ", 0, 1);
-            }
-        } else if (message != NULL && strlen(message) > 0) {
-            int startIdx = (page - 2) * 16; 
-            if (startIdx < strlen(message)) {
-                char message_block[17] = {0}; 
-                strncpy(message_block, message + startIdx, 16);
-                lcdSetText(&lcd, "   Mensagem:    ", 0, 0);
-                lcdSetText(&lcd, message_block, 0, 1);
-            }
-        }
-
-        page = (page + 1) % totalPages; 
+        vTaskDelay(2 / portTICK_PERIOD_MS);
+        lcdSetText(&lcd, " AvanteTech Jr. ", 0, 0);
+        lcdSetText(&lcd, time_date, 0, 1);
         vTaskDelay(1500 / portTICK_PERIOD_MS);
+
+        lcdClear(&lcd);
+        vTaskDelay(2 / portTICK_PERIOD_MS);
+        lcdSetText(&lcd, "     Status     ", 0, 0);
+        if (status_to_show == 'O')
+        {
+            lcdSetText(&lcd, "    Ocupada    ", 0, 1);
+        }
+        else if (status_to_show == 'D')
+        {
+            lcdSetText(&lcd, "   Desocupada   ", 0, 1);
+        }
+
+        vTaskDelay(1500 / portTICK_PERIOD_MS);
+        if (message_to_show != NULL)
+        {
+            lcdClear(&lcd);
+            vTaskDelay(2 / portTICK_PERIOD_MS);
+            lcdSetText(&lcd, "   Mensagem:    ", 0, 0);
+            if (strlen(message_to_show) > 16)
+            {
+                lcdScrollText(&lcd, message_to_show, 1, LCD_SCROLL_LEFT, 300);
+            }
+            else
+            {
+                lcdSetText(&lcd, message_to_show, 0, 1);
+                vTaskDelay(1500 / portTICK_PERIOD_MS);
+            }
+        }
+        vTaskDelay(100 / portTICK_PERIOD_MS);
     }
 }
 
@@ -123,6 +212,23 @@ void app_main(void)
         ESP_LOGE(TAG, "failed to initialize GATT server, error code: %d", rc);
         return;
     }
+
+    if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND)
+    {
+        ESP_ERROR_CHECK(nvs_flash_erase());
+        ret = nvs_flash_init();
+    }
+    ESP_ERROR_CHECK(ret);
+
+    wifi_connect_init("AvanteTech_WIFI", "@@avante2025@@");
+
+    sntp_time_init();
+    lcdClear(&lcd);
+    vTaskDelay(2 / portTICK_PERIOD_MS);
+    lcdSetText(&lcd, " CONECTANDO...  ", 0, 0);
+    sntp_wait_for_sync();
+
+    print_current_time();
 
     nimble_host_config_init();
 
