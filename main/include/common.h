@@ -24,6 +24,6 @@
 
 #define TAG_LCD "LCD"
 #define TAG "NimBLE_GATT_Server"
-#define DEVICE_NAME "SIG_BOARD"
+#define DEVICE_NAME "SIG_BOARD1"
 
 #endif 
