@@ -3,7 +3,7 @@
 #include "esp_sntp.h"
 #include <string.h>
 
-#define TIME_ZONE "BRT3BRST,M10.3.0/0,M2.3.0/0"
+#define TIME_ZONE "BRT3"
 static const char *TAG = "SNTP";
 
 void sntp_time_init(void) {
